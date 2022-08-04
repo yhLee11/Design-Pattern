@@ -1,0 +1,107 @@
+# Chap12 팩토리 메서드 패턴
+## 여러 가지 방식의 엘리베이터 스케줄링 방법 지원하기
+여러 대의 엘리베이터가 있는 경우를 생각해보자. 사용자가 엘리베이터 외부에서 버튼(FloorButton)을 누른 경우에는 여러 대의 엘리베이터 중 하나를 선택해 이동시켜야 한다. 이와 같이 주어진 요청(목적지 층과 방향)을 받았을 때 여러 대의 엘리베이터 중 하나를 선택하는 것을 '스케줄링'이라고 한다. 
+![](https://velog.velcdn.com/images/yh_lee/post/6760f99c-8963-4649-914f-dabab503bb66/image.png)
+
+ElevatorManager 클래스는 이동 요청을 처리하는 클래스로 엘리베이터를 스케줄링하기 위한 ThroughputScheduler 객체를 갖는다. 그리고 각 엘리베이터의 이동을 책임지는 ElevatorController 객체를 복수 개 갖는다. ElevatorManager 클래스의 requestElevator 메서드는 요청을 받았을 때 우선 ThroughputScheduler의 selectElevator 메서드를 호출해 엘리베이터를 선택한다. 그리고 ElevatorController 객체의 gotoFloor 메서드를 호출해 엘리베이터를 이동시킨다. 
+
+```java
+public class ElevatorManager{
+	private List<ElevatorController> controllers;
+    private ThroughputScheduler throughputScheduler;
+    
+    //주어진 수만큼 ElevatorController를 생성
+    public ElevatorManager(int controllerCount){
+    	controllers = new ArrayList<ElevatorController>(controllerCount);
+        for (int i=0;i<controllerCount;i++){
+        	ElevatorController controller = new ElevatorController(1);
+            controllers.add(controller);
+        }	
+        scheduler = new ThroughputScheduler();
+    }
+    
+    void requestElevator(int destination, Direction direction){
+    	//ThroughputScheduler를 이용해 엘리베이터 선택
+        int selectedElevator = scheduler.selectElevator(this, distination, direction);
+        
+        //선택된 엘리베이터 이동시킴
+        controllers.get(selectedElevator).gotoFloor(destination);
+    }
+}
+
+public class ElvatorController{
+	private int id;
+    private int curFloor;
+    
+    public ElevatorController(int id){
+    	this.id=id;
+        curFloor=1;
+    }	
+    
+    public void gotoFloor(int destination){
+    	System.out.println("Elevator ["+id+"] Floor: "+curFloor);
+        
+        //목적지 층으로 엘리베이터 이동
+        curFloor = destination;
+        System.out.println("==>"+curFloor);
+    }
+}
+
+public ThroughputScheduler{
+	public int selectElevator(ElevatorManager manager, int destination, Direction direction){
+    	return 0;//임의로 선택
+    }
+}
+```
+
+## 문제점
+### 현재 ThroughputScheduler 전략을 사용한다. 만약 다른 스케줄 전략을 사용해야 한다면?
+예를 들어 사용자의 대기 시간을 최소화하는 엘리베이터 선택 전략 사용해야 한다면? 실행 중에 스케줄링 전략을 변경, 즉 동적 스케줄링을 지원해야 한다면?
+
+동적 스케줄링을 지원하도록 ElevatorManager 클래스를 수정한다.
+```java
+publi class ElevatorManger{
+	...
+    void requestElevator(int destination, Direction direction){
+    	...
+        if(hour<12)//오전에는 ResponseTimeScheduler를 이용함
+        	scheduler=new ResponseTimeScheduler();
+        else//오후에는 ThroughputScheduler를 이용함
+        	scheduler=new ThroughputScheduler();
+        ...
+    }
+}
+```
+ThroughputScheduler, ResponseTimeScheduler 객체를 생성 후 이를 각각의 클래스가 아니라 ElevatorScheduler라는 인터페이스를 이용한다. 이는 결과적으로 스트래티지 패턴을 활용해 엘리베이터 스케줄링 전략을 설계한 것이다. 
+
+즉, ElevatorScheduler 인터페이스는 AbstractStrategy에 해당되고 ThroughputScheduler와 ResponseTimeScheduler 클래스는 ConcreteStrategy에 해당된다. 
+
+![](https://velog.velcdn.com/images/yh_lee/post/43214a9f-b752-44b5-98ae-a6c6e4ad8bdd/image.png)
+
+엘리베이터 스케줄링 전략이 추가되거나 동적 스케줄링 방식으로 전략을 선택하도록 변경되면, 해당 스케줄링 전략을 지원하는 구체적인 클래스를 생성해야 할 뿐만 아니라 requestElevator 메서드도 수정할 수밖에 없다. 그런데 requestElevator 메서드는 엘리베이터 선택과 선택된 엘리베이터를 이동시키는 것이 근본 책임이다. 따라서 엘리베이터를 선택하는 전략의 변경에 따라 requestElevator가 변경되는 것은 바람직하지 않다. 
+
+## 해결책
+주어진 기능을 실제로 제공하는 적절한 클래스 생성 작업을 별도의 클래스/메서드로 분리시키는 것이 좋다. ElevatorManager 클래스가 지금처럼 직접 ThroughputScheduler 객체와 ResponseTimeScheduler 객체를 생성하는 대신 SchedulerFactory 클래스가 이들 객체를 생성하도록 설계를 변경한다.![](https://velog.velcdn.com/images/yh_lee/post/57fe64d9-8eb2-484e-a1ae-576afd121caa/image.png)
+
+
+## 팩토리 메서드 패턴(Factory Method Pattern)
+팩토리 메서드 패턴은 객체의 생성 코드를 별도의 클래스/메서드로 분리함으로써 객체 생성의 변화에 대비하는데 유용하다. ![](https://velog.velcdn.com/images/yh_lee/post/b763716a-6a37-4ce3-bc59-92e2a1b065f5/image.png)
+왼쪽 그림에서는 A,Z 클래스가 필요에 따라 X1,X2 객체를 생성해 사용한다. 만약 X1,X2 생성 방식이 달라지거나 X3같은 새로운 객체를 생성해야 하는 경우에는 X1,X2를 생성하는 모든 코드 부분을 변경해야 한다.
+
+오른쪽 그림 같이 팩토리 메서드 패턴을 사용하면 객체 생성 기능을 제공하는 Factory 클래스를 정의하고 이를 활용하는 방식으로 설계하면 된다. 이렇게 설계하면 변경이 필요할 때 Factory 클래스만 변경하고 A,Z 클래스는 변경이 필요 없다. 
+![](https://velog.velcdn.com/images/yh_lee/post/5ae51353-f566-42ce-a05f-36dcded7e1f7/image.png)
+
+### Product
+팩토리 메서드로 생성될 객체의 공통 인터페이스
+### ConcreteProduct
+구체적으로 객체가 생성되는 클래스
+### Creater
+팩토리 메서드를 갖는 클래스
+### ConcreteCreator
+팩토리 메서드를 구현하는 클래스로 ConcreteProduct 객체를 생성한다.
+
+![](https://velog.velcdn.com/images/yh_lee/post/c5e4a92f-6140-4d59-8ddf-1548e53fc7f3/image.png)
+- ElevatorScheduler 인터페이스는 Product 역할을 한다.
+- ResponseTimerScheduler 클래스와 ThroughputScheduler 클래스는 ConcreteProduct 역할을 한다.
+- ElevatorManager 클래스는 Creater 역할을 한다.
+- ElevatorManagerWithThroughputScheduling, ElevatorManagerWithDynamicScheduling, ElevatorManagerWithResponseTimeScheduling 클래스는 ConcreteCreator 역할을 한다.
